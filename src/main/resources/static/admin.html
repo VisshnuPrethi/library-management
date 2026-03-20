@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin – Library System</title><link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">📚 Library System</div>
+  <div class="nav-links">
+    <a href="/index.html">Books</a><a href="/admin.html">Admin</a>
+    <span id="usernameDisplay" class="nav-user"></span>
+    <button onclick="logout()" class="btn btn-sm">Logout</button>
+  </div>
+</nav>
+<main class="container">
+  <h1>Librarian Admin Panel</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(event,'books')">📚 Books</button>
+    <button class="tab" onclick="switchTab(event,'requests')">📋 Requests</button>
+    <button class="tab" onclick="switchTab(event,'users')">👥 Users</button>
+  </div>
+  <div id="tab-books" class="tab-content active">
+    <div class="section-header"><h2>Books</h2><button onclick="showForm()" class="btn">+ Add Book</button></div>
+    <div id="bookForm" class="form-card" style="display:none">
+      <h3 id="formTitle">Add Book</h3>
+      <input type="hidden" id="editId">
+      <div class="form-row">
+        <div class="form-group"><label for="bTitle">Title *</label><input type="text" id="bTitle" maxlength="255"><span class="field-error" id="bTitleErr"></span></div>
+        <div class="form-group"><label for="bAuthor">Author *</label><input type="text" id="bAuthor" maxlength="255"><span class="field-error" id="bAuthorErr"></span></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label for="bCat">Category *</label><input type="text" id="bCat" maxlength="100"><span class="field-error" id="bCatErr"></span></div>
+        <div class="form-group"><label for="bIsbn">ISBN</label><input type="text" id="bIsbn" maxlength="20"></div>
+        <div class="form-group"><label for="bCopies">Copies *</label><input type="number" id="bCopies" min="0" max="9999" value="1"><span class="field-error" id="bCopiesErr"></span></div>
+      </div>
+      <div id="formErr" class="message error" style="display:none"></div>
+      <div class="form-actions">
+        <button onclick="saveBook()" class="btn">Save</button>
+        <button onclick="hideForm()" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+    <div id="booksList"><p class="empty">Loading...</p></div>
+  </div>
+  <div id="tab-requests" class="tab-content">
+    <h2>Borrow Requests</h2>
+    <button onclick="loadRequests()" class="btn btn-secondary btn-sm" style="margin-bottom:1rem">Refresh</button>
+    <div id="requestsList"><p class="empty">Loading...</p></div>
+  </div>
+  <div id="tab-users" class="tab-content">
+    <h2>Users</h2>
+    <div id="usersList"><p class="empty">Loading...</p></div>
+  </div>
+</main>
+<script src="/js/auth.js"></script>
+<script src="/js/api.js"></script>
+<script>
+(function(){var t=getToken(),r=getRole();if(!t){window.location.href='/login.html';return}if(r!=='LIBRARIAN'){window.location.href='/index.html';return}})();
+document.getElementById('usernameDisplay').textContent=getUsername()||'';
+document.addEventListener('DOMContentLoaded',function(){loadBooks();loadRequests();loadUsers()});
+function switchTab(ev,name){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
+  ev.target.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+async function loadBooks(){
+  var el=document.getElementById('booksList');
+  try{
+    var books=await apiFetch('/api/books');
+    if(!books||books.length===0){el.innerHTML='<p class="empty">No books</p>';return}
+    el.innerHTML='<table class="data-table"><thead><tr><th>ID</th><th>Title</th><th>Author</th><th>Category</th><th>ISBN</th><th>Copies</th><th>Actions</th></tr></thead><tbody>'+
+      books.map(function(b){return '<tr><td>'+b.id+'</td><td>'+escapeHtml(b.title)+'</td><td>'+escapeHtml(b.author)+'</td><td>'+escapeHtml(b.category)+'</td><td>'+(b.isbn?escapeHtml(b.isbn):'—')+'</td><td>'+b.availableCopies+'</td><td>'+
+        '<button onclick=\'editBook('+b.id+','+JSON.stringify(b.title)+','+JSON.stringify(b.author)+','+JSON.stringify(b.category)+','+JSON.stringify(b.isbn||'')+','+b.availableCopies+')\' class="btn btn-sm">Edit</button> '+
+        '<button onclick="delBook('+b.id+')" class="btn btn-sm btn-danger">Delete</button></td></tr>'}).join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML='<p style="color:red">'+escapeHtml(e.message)+'</p>'}
+}
+function showForm(){document.getElementById('formTitle').textContent='Add Book';document.getElementById('editId').value='';['bTitle','bAuthor','bCat','bIsbn'].forEach(function(id){document.getElementById(id).value=''});document.getElementById('bCopies').value=1;document.getElementById('formErr').style.display='none';['bTitleErr','bAuthorErr','bCatErr','bCopiesErr'].forEach(function(id){document.getElementById(id).textContent=''});document.getElementById('bookForm').style.display='block';document.getElementById('bookForm').scrollIntoView({behavior:'smooth'})}
+function hideForm(){document.getElementById('bookForm').style.display='none'}
+function editBook(id,title,author,cat,isbn,copies){document.getElementById('formTitle').textContent='Edit Book';document.getElementById('editId').value=id;document.getElementById('bTitle').value=title;document.getElementById('bAuthor').value=author;document.getElementById('bCat').value=cat;document.getElementById('bIsbn').value=isbn;document.getElementById('bCopies').value=copies;document.getElementById('formErr').style.display='none';document.getElementById('bookForm').style.display='block';document.getElementById('bookForm').scrollIntoView({behavior:'smooth'})}
+async function saveBook(){
+  var id=document.getElementById('editId').value;
+  var payload={title:document.getElementById('bTitle').value.trim(),author:document.getElementById('bAuthor').value.trim(),category:document.getElementById('bCat').value.trim(),isbn:document.getElementById('bIsbn').value.trim(),availableCopies:parseInt(document.getElementById('bCopies').value)||0};
+  ['bTitleErr','bAuthorErr','bCatErr','bCopiesErr'].forEach(function(i){document.getElementById(i).textContent=''});
+  var ok=true;
+  if(!payload.title){document.getElementById('bTitleErr').textContent='Required';ok=false}
+  if(!payload.author){document.getElementById('bAuthorErr').textContent='Required';ok=false}
+  if(!payload.category){document.getElementById('bCatErr').textContent='Required';ok=false}
+  if(payload.availableCopies<0){document.getElementById('bCopiesErr').textContent='Cannot be negative';ok=false}
+  if(!ok)return;
+  try{
+    await apiFetch(id?'/api/books/'+id:'/api/books',{method:id?'PUT':'POST',body:JSON.stringify(payload)});
+    hideForm();loadBooks();
+  }catch(e){document.getElementById('formErr').textContent=e.message||'Save failed';document.getElementById('formErr').style.display='block'}
+}
+async function delBook(id){if(!confirm('Delete this book?'))return;try{await apiFetch('/api/books/'+id,{method:'DELETE'});loadBooks()}catch(e){alert(e.message)}}
+async function loadRequests(){
+  var el=document.getElementById('requestsList');
+  try{
+    var list=await apiFetch('/api/borrow/all');
+    if(!list||list.length===0){el.innerHTML='<p class="empty">No requests</p>';return}
+    el.innerHTML='<table class="data-table"><thead><tr><th>ID</th><th>User</th><th>Book</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead><tbody>'+
+      list.map(function(r){return '<tr><td>'+r.id+'</td><td>'+escapeHtml(r.username)+'</td><td>'+escapeHtml(r.bookTitle)+'</td><td><span class="badge badge-'+r.status.toLowerCase()+'">'+r.status+'</span></td><td>'+new Date(r.requestedAt).toLocaleString()+'</td><td>'+(r.status==='PENDING'?'<button onclick="process('+r.id+',true)" class="btn btn-sm btn-success">Approve</button> <button onclick="process('+r.id+',false)" class="btn btn-sm btn-danger">Reject</button>':'—')+'</td></tr>'}).join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML='<p style="color:red">'+escapeHtml(e.message)+'</p>'}
+}
+async function process(id,approve){try{await apiFetch('/api/borrow/requests/'+id+'/'+(approve?'approve':'reject'),{method:'PUT'});loadRequests();loadBooks()}catch(e){alert(e.message)}}
+async function loadUsers(){
+  var el=document.getElementById('usersList');
+  try{
+    var list=await apiFetch('/api/users');
+    if(!list||list.length===0){el.innerHTML='<p class="empty">No users</p>';return}
+    el.innerHTML='<table class="data-table"><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Enabled</th></tr></thead><tbody>'+
+      list.map(function(u){return '<tr><td>'+u.id+'</td><td>'+escapeHtml(u.username)+'</td><td>'+escapeHtml(u.email)+'</td><td><span class="badge badge-'+u.role.toLowerCase()+'">'+u.role+'</span></td><td>'+(u.enabled?'✅':'❌')+'</td></tr>'}).join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML='<p style="color:red">'+escapeHtml(e.message)+'</p>'}
+}
+</script>
+</body></html>

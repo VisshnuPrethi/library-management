@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Library System</title><link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">📚 Library System</div>
+  <div class="nav-links" id="navLinks">
+    <a href="/index.html">Books</a>
+    <a href="/my-requests.html" id="myRequestsLink" style="display:none">My Requests</a>
+    <a href="/admin.html" id="adminLink" style="display:none">Admin Panel</a>
+    <span id="usernameDisplay" class="nav-user"></span>
+    <button id="logoutBtn" onclick="logout()" style="display:none" class="btn btn-sm">Logout</button>
+    <a href="/login.html" id="loginLink" class="btn btn-sm">Login</a>
+    <a href="/register.html" id="registerLink" class="btn btn-sm btn-secondary">Register</a>
+  </div>
+</nav>
+<main class="container">
+  <h1>Book Catalog</h1>
+  <div id="loginBanner" class="login-banner" style="display:none">
+    📖 <strong>Log in</strong> to request books. <a href="/login.html">Sign in here</a>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Search by title, author or category…" maxlength="100">
+    <button onclick="searchBooks()" class="btn">Search</button>
+    <button onclick="loadBooks()" class="btn btn-secondary">Clear</button>
+  </div>
+  <div id="message" class="message" style="display:none"></div>
+  <div id="booksGrid" class="books-grid"><p>Loading books…</p></div>
+</main>
+<script src="/js/auth.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  updateNav();
+  if(!getToken())document.getElementById('loginBanner').style.display='block';
+  loadBooks();
+  document.getElementById('searchInput').addEventListener('keydown',function(e){if(e.key==='Enter')searchBooks()});
+});
+async function loadBooks(){
+  document.getElementById('searchInput').value='';
+  var grid=document.getElementById('booksGrid');
+  grid.innerHTML='<p>Loading books…</p>';
+  try{
+    var res=await fetch('/api/books');
+    if(!res.ok)throw new Error('Server error '+res.status);
+    var books=await res.json();
+    renderBooks(books);
+  }catch(e){grid.innerHTML='<p class="empty" style="color:red">Failed to load books. Is the server running on port 8080?</p>'}
+}
+async function searchBooks(){
+  var kw=document.getElementById('searchInput').value.trim();
+  if(!kw){loadBooks();return}
+  var grid=document.getElementById('booksGrid');
+  grid.innerHTML='<p>Searching…</p>';
+  try{
+    var res=await fetch('/api/books/search?keyword='+encodeURIComponent(kw));
+    var books=await res.json();
+    renderBooks(books);
+  }catch(e){grid.innerHTML='<p class="empty" style="color:red">Search failed</p>'}
+}
+function renderBooks(books){
+  var grid=document.getElementById('booksGrid');
+  if(!books||books.length===0){grid.innerHTML='<p class="empty">No books found.</p>';return}
+  var loggedIn=!!getToken();
+  var isLibrarian=getRole()==='LIBRARIAN';
+  grid.innerHTML=books.map(function(b){
+    var btn='';
+    if(!loggedIn){
+      btn=b.availableCopies>0?'<a href="/login.html" class="btn btn-sm" style="text-align:center">Login to Borrow</a>':'<button class="btn btn-sm" disabled>Not Available</button>';
+    }else if(isLibrarian){
+      btn='<span style="font-size:.8rem;color:#64748b;font-style:italic">Librarian account</span>';
+    }else{
+      btn=b.availableCopies>0?'<button onclick="borrowBook('+b.id+')" class="btn btn-sm">Request Borrow</button>':'<button class="btn btn-sm" disabled>Not Available</button>';
+    }
+    return '<div class="book-card"><div class="book-category">'+escapeHtml(b.category)+'</div><h3>'+escapeHtml(b.title)+'</h3><p class="book-author">by '+escapeHtml(b.author)+'</p>'+(b.isbn?'<p class="book-isbn">ISBN: '+escapeHtml(b.isbn)+'</p>':'')+'<p class="book-copies '+(b.availableCopies===0?'unavailable':'available')+'">'+(b.availableCopies>0?b.availableCopies+' copies available':'Not available')+'</p>'+btn+'</div>';
+  }).join('');
+}
+async function borrowBook(bookId){
+  var token=getToken();
+  if(!token){window.location.href='/login.html';return}
+  try{
+    var res=await fetch('/api/borrow/request/'+bookId,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}});
+    if(res.status===401){showMsg('Session expired. Please log in again.','error');setTimeout(function(){window.location.href='/login.html'},2000);return}
+    var data=await res.json();
+    if(!res.ok){showMsg(data.error||'Request failed','error');return}
+    showMsg('Borrow request submitted! Check "My Requests" to track it.','success');
+    loadBooks();
+  }catch(e){showMsg('Connection error','error')}
+}
+function showMsg(msg,type){
+  var el=document.getElementById('message');
+  el.textContent=msg;el.className='message '+type;el.style.display='block';
+  setTimeout(function(){el.style.display='none'},5000);
+}
+</script>
+</body></html>

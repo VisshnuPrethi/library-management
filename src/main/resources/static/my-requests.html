@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>My Requests – Library System</title><link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">📚 Library System</div>
+  <div class="nav-links">
+    <a href="/index.html">Books</a><a href="/my-requests.html">My Requests</a>
+    <span id="usernameDisplay" class="nav-user"></span>
+    <button onclick="logout()" class="btn btn-sm">Logout</button>
+  </div>
+</nav>
+<main class="container">
+  <h1>My Borrow Requests</h1>
+  <button onclick="loadRequests()" class="btn btn-secondary btn-sm" style="margin-bottom:1rem">Refresh</button>
+  <div id="container"><p>Loading...</p></div>
+</main>
+<script src="/js/auth.js"></script>
+<script>
+(function(){if(!getToken())window.location.href='/login.html'})();
+document.getElementById('usernameDisplay').textContent=getUsername()||'';
+document.addEventListener('DOMContentLoaded',loadRequests);
+async function loadRequests(){
+  var el=document.getElementById('container');
+  el.innerHTML='<p>Loading...</p>';
+  var token=getToken();
+  if(!token){window.location.href='/login.html';return}
+  try{
+    var res=await fetch('/api/borrow/my-requests',{headers:{'Authorization':'Bearer '+token}});
+    if(res.status===401){window.location.href='/login.html';return}
+    if(!res.ok){el.innerHTML='<p style="color:red">Error loading requests</p>';return}
+    var list=await res.json();
+    if(!list||list.length===0){el.innerHTML='<p class="empty">No requests yet. <a href="/index.html">Browse books</a></p>';return}
+    el.innerHTML='<table class="data-table"><thead><tr><th>#</th><th>Book</th><th>Status</th><th>Requested</th><th>Processed</th></tr></thead><tbody>'+
+      list.map(function(r){return '<tr><td>'+r.id+'</td><td>'+escapeHtml(r.bookTitle)+'</td><td><span class="badge badge-'+r.status.toLowerCase()+'">'+r.status+'</span></td><td>'+fmt(r.requestedAt)+'</td><td>'+(r.processedAt?fmt(r.processedAt):'—')+'</td></tr>'}).join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML='<p style="color:red">Connection error</p>'}
+}
+function fmt(dt){return dt?new Date(dt).toLocaleString():'—'}
+</script>
+</body></html>
